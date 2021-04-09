@@ -3,8 +3,14 @@
 A WebHID experiment, which streams your desktop to your GMMK keyboard!
 ![Showcase](https://raw.githubusercontent.com/meinlebenswerk/GMMKAmbilightChrome/main/showcase/streaming.png?raw=true)
 
+## Important!
+This only works on chrome, because other browsers dont support the webapi yet.
+Also this currently onyl work with the ISO-Variant of the GMMK, but adding a new layout shouln't be too tricky.
+Apparently you can access HID devices through WebUSB, so that might be a route for an even more hacky workaround?
+
 ## Usage
 No more building and running on your own - the app is now hosted [here](https://meinlebenswerk.github.io/GMMKAmbilightChrome/).
+
 ### Running from source
 If you're adventurous, you can run the app directly from source on your own computer.
 No more electron, much less hassle, just install `node` and `chrome` and you're good to go!
@@ -34,6 +40,7 @@ The blur is currently implemented as a simple, gaussian curve, computed on the J
  - ~~the UI get's slowed down by the synchronous USB-Transfers~~
  - currently, only ISO-Keyboard layouts are supported :)
  - Blur filter is not configurable anymore
+ - *ONLY* works on Chrome and the no-HID case is handled not that nicely
   
 ## Big thanks to:
 Well the same amazing people, that helped GMMKAmbilight to become a reality!
