@@ -4,6 +4,9 @@ A WebHID experiment, which streams your desktop to your GMMK keyboard!
 ![Showcase](https://raw.githubusercontent.com/meinlebenswerk/GMMKAmbilightChrome/main/showcase/streaming.png?raw=true)
 
 ## Usage
+No more building and running on your own - the app is now hosted [here](https://meinlebenswerk.github.io/GMMKAmbilightChrome/).
+### Running from source
+If you're adventurous, you can run the app directly from source on your own computer.
 No more electron, much less hassle, just install `node` and `chrome` and you're good to go!
 First clone this repository with
 
