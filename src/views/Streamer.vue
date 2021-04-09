@@ -23,7 +23,9 @@
       span But enough information - let's get to the cool stuff!
       br
       span To get started, simply select your keyboard and video input.
-  .setup-wrapper
+  .info-wrapper(v-if="!hasWebHIDSupport")
+    h1 !! Please use Chrome, currently WebHID is not supported on other browsers. !!
+  .setup-wrapper(v-if="hasWebHIDSupport")
     GSButton(
       @click="selectHIDDevice"
       text="Select keyboard"
@@ -114,6 +116,8 @@ interface HomeData {
   showKeyPreview: boolean;
 
   canvasSize: { width: number, height: number };
+
+  hasWebHIDSupport: boolean;
 }
 
 export default Vue.extend({
@@ -137,6 +141,7 @@ export default Vue.extend({
       displayStreamStarted: false,
       showKeyPreview: false,
       canvasSize: { width: 0, height: 0 },
+      hasWebHIDSupport: false,
     };
   },
   components: {
@@ -147,6 +152,7 @@ export default Vue.extend({
     StopIcon,
   },
   mounted() {
+    this.hasWebHIDSupport = this.$gmmkInterface.HIDAvailable;
     const maps = generateMap();
     this.kbdBitmapSize = maps?.kbdBitmapSize;
     this.keyMatrix = maps?.combinedMatrix;
