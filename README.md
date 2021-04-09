@@ -1,7 +1,7 @@
 # gmmkambilightchrome
 
 A WebHID experiment, which streams your desktop to your GMMK keyboard!
-![Showcase](https://raw.githubusercontent.com/meinlebenswerk/GMMKAmbilightChrome/master/showcase/streaming.png?raw=true)
+![Showcase](https://raw.githubusercontent.com/meinlebenswerk/GMMKAmbilightChrome/main/showcase/streaming.png?raw=true)
 
 ## Usage
 No more electron, much less hassle, just install `node` and `chrome` and you're good to go!

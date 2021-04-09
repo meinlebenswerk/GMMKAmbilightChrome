@@ -4,7 +4,7 @@
     h1 GMMK Ambilight
     h2 A WebHID experiment
     .text-wrapper
-      span Under the hood hacky combination of DesktopStreaming is used with the
+      span Under the hood a hacky combination of DesktopStreaming is used with the
       b amazing
       span WebHID interface, to communicate directly from the browser to the Keyboard.
       span This works best (and I think only) on Chrome.
@@ -16,7 +16,7 @@
       a(href="https://github.com/paulguy/gmmkctl") gmmkctl
       span and
       a(href="https://github.com/dokutan/rgb_keyboard") rgb_keyboard
-      span definitely check them out, they're very cool projects and without them
+      span - definitely check them out, they're very cool projects and without them
       span this little experiment would not exist.
       br
       br
@@ -58,7 +58,7 @@
 
       .canvas-wrapper
         canvas(ref="previewCanvas")
-        //- .overlay(v-if="showKeyPreview")
+        .overlay(v-if="showKeyPreview")
         .key-preview(
           v-if="showKeyPreview"
           v-for="key in keyMatrix.flat()"
