@@ -12,6 +12,11 @@
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "baseUrl": ".",
+    "resolveJsonModule": true,
+    "typeRoots": [
+      "node_modules/@types",
+      "src/customTypings"
+    ],
     "types": [
       "webpack-env"
     ],
