@@ -281,7 +281,7 @@ export default Vue.extend({
 
     // GL Post-processing
     webgl_process_frame(): void {
-      console.log('processing webgl frame');
+      // console.log('processing webgl frame');
       const video = this.$refs.videoPreview as HTMLVideoElement;
       const canvas = this.$refs.previewCanvas as HTMLCanvasElement;
       if (!this.gl) this.init_webGL();
@@ -388,7 +388,7 @@ export default Vue.extend({
       }
       // console.log(this.pixelBuffer);
       // console.log(keyColors);
-      await this.$gmmkInterface.setKeys(keyColors);
+      await this.$gmmkInterface.setKeysDiff(keyColors);
 
       // request next frame:
       // this.renderInterval = setTimeout(this.)

@@ -19,6 +19,7 @@ export const GMMK_KEYCOLORS_START_OFFSET = 5;
 export const GMMK_KEYCOLORS_DATA_OFFSET = 8;
 // eslint-disable-next-line max-len
 export const GMMK_KEYCOLORS_DATA_SIZE = Math.floor((GMMK_PACKET_SIZE - GMMK_KEYCOLORS_DATA_OFFSET) / 3) * 3;
+export const GMMK_KEYCOLORS_PER_PACKET = GMMK_KEYCOLORS_DATA_SIZE / 3;
 
 export interface RGBColor {
   r: number;
@@ -40,6 +41,78 @@ const dataSetProfile = [0x04, 0xdd, 0x03, 0x04, 0x2c, 0x00, 0x00, 0x00, 0x55, 0x
   0x0b, 0x0a, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x14, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+
+// Helper methods:
+
+interface LineDiff {
+  offset: number
+  length: number
+}
+
+const frameDiff = (current: RGBColor[], next: RGBColor[], accuracy = 1.0): LineDiff[] => {
+  const acceptableDelta = (1.0 - accuracy) * (0xff * 3);
+  const dirtyPixels = current.map((value, index) => {
+    const nextValue = next[index];
+
+    // check for color-delta
+    // ideally this is done in a non-rgb color-space.
+    const delta = (nextValue.r - value.r) + (nextValue.g - value.g) + (nextValue.b - value.b);
+    // console.log(delta, acceptableDelta);
+    return Math.abs(delta) > acceptableDelta;
+
+    // check if the color matches:
+    // return value.r !== nextValue.r || value.g !== nextValue.g || value.b !== nextValue.b;
+  });
+  // console.log(dirtyPixels, dirtyPixels.filter((d) => d).length);
+
+  // now this alone doesnt help
+  // Using an incremental update only makes sense if the diff has less than
+  // whatever the number of normal updates is (which i think is 7)
+  // lines, which differ, at seven -> we can just use a normal update.
+
+  // finding the lines can naively be done by looping over the dirty
+  // array and finding consecutive lines of dirty pixels.
+  // But there's prob. a better way to do it.
+  // instead of breaking a line, once it reaches a non-dirty pixel, just continue
+  // We'll need to send full packets anyways.
+
+  // Also maybe, we can implement something
+  // Which takes in an accuracy parameter, which affects when a pixel is dirty
+  // This would mean we'd need to partially update the locally stored pixels as well.
+  // but hey, that's faster than using an USB-Transfer
+
+  const fillPackets = true;
+
+  const lines = [];
+  let line: LineDiff | null = null;
+  for (let i = 0; i < dirtyPixels.length; i += 1) {
+    const dirtyFlag = dirtyPixels[i];
+    if (dirtyFlag) {
+      if (line) {
+        line.length += 1;
+        if (line.length > GMMK_KEYCOLORS_PER_PACKET) {
+          lines.push(line);
+          line = null;
+        }
+      } else {
+        line = { offset: i, length: 1 };
+      }
+    } else if (line) {
+      if (fillPackets) {
+        line.length += 1;
+        if (line.length > GMMK_KEYCOLORS_PER_PACKET) {
+          lines.push(line);
+          line = null;
+        }
+      } else {
+        lines.push(line);
+        line = null;
+      }
+    }
+  }
+
+  return lines;
+};
 
 export class GMMKInterface {
   HIDAvailable: boolean;
@@ -71,7 +144,7 @@ export class GMMKInterface {
     // reset the locally selected device:
     this.selectedDevice = null;
 
-    const devices = await this.WebHID.requestDevice({
+    [this.selectedDevice] = await this.WebHID.requestDevice({
       filters: [{
         vendorId: 0x0C45,
         productId: 0x652f,
@@ -79,13 +152,9 @@ export class GMMKInterface {
         usagePage: 0xFF1C,
       }],
     });
-    console.log(devices);
 
-    if (devices.length === 0) return false;
-    [this.selectedDevice] = devices;
-
-    if (this.selectedDevice) return this.initializeKeyboard();
-    return false;
+    if (!this.selectedDevice) return false;
+    return this.initializeKeyboard();
   }
 
   // TODO this has currently no error checking at all
@@ -93,12 +162,14 @@ export class GMMKInterface {
   async initializeKeyboard() : Promise<boolean> {
     if (!this.selectedDevice) return false;
     if (!this.selectedDevice.opened) await this.selectedDevice.open();
-    this.setProfile(1);
-    this.setCustomMode();
-    this.setRate(3);
-    this.setDelay(0);
+    await this.setProfile(1);
+    await this.setCustomMode();
+    // This sets the USB Polling Rate (0-1KHz)
+    await this.setRate(3);
+    await this.setDelay(0);
 
-    this.setKeys(this.colors);
+    await this.setKeys(this.colors);
+    console.log(this);
 
     this.initialized = true;
     return true;
@@ -115,12 +186,11 @@ export class GMMKInterface {
   async setMode(mode: number): Promise<void> {
     this.resetBuffer();
 
+    // send data
+    await this.startCommand();
     this.buffer[GMMK_COMMAND_OFFSET] = GMMK_CMD_SUBCOMMAND;
     this.buffer[GMMK_SUBCMD_CMD_OFFSET] = 0x01;
     this.buffer[GMMK_SUBCMD_ARG_OFFSET] = mode;
-
-    // send data
-    await this.startCommand();
     await this.write(this.buffer);
     await this.endCommand();
   }
@@ -128,7 +198,6 @@ export class GMMKInterface {
   // // Public
   async setProfile(profile: 1 | 2 | 3): Promise<void> {
     if (!this.selectedDevice) return;
-    // profile = Math.min(3, Math.max(1, profile));
     const message = [...dataSetProfile];
     message[18] = profile - 1;
     await this.startCommand();
@@ -138,8 +207,6 @@ export class GMMKInterface {
 
   async setDelay(delay: number): Promise<void> {
     delay = Math.max(0, Math.min(delay, 0xff));
-    this.resetBuffer();
-
     await this.startCommand();
     this.buffer[GMMK_COMMAND_OFFSET] = GMMK_CMD_SUBCOMMAND;
     this.buffer[GMMK_SUBCMD_CMD_OFFSET] = 0x01;
@@ -167,7 +234,7 @@ export class GMMKInterface {
     if (!this.initialized) return;
     const start = 0;
     const count = colors.length;
-    // console.time('rgbkbdwrite');
+    console.time('rgbkbdwrite');
     await this.startCommand();
 
     // const keysPerTransfer = Math.floor(GMMK_KEYCOLORS_DATA_SIZE/3)
@@ -196,7 +263,6 @@ export class GMMKInterface {
         this.buffer[GMMK_KEYCOLORS_DATA_OFFSET + j + 1] = colors[i + Math.floor(j / 3)].g;
         this.buffer[GMMK_KEYCOLORS_DATA_OFFSET + j + 2] = colors[i + Math.floor(j / 3)].b;
       }
-
       // eslint-disable-next-line no-await-in-loop
       await this.write(this.buffer);
       i += keysToBeSent;
@@ -204,7 +270,61 @@ export class GMMKInterface {
       // ${bytesToBeSent / 3} keys | ${count - i} remaining`);
     }
     await this.endCommand();
-    // console.timeEnd('rgbkbdwrite');
+    console.timeEnd('rgbkbdwrite');
+    this.colors = colors;
+  }
+
+  async setKeysDiff(colors: Array<RGBColor>): Promise<void> {
+    if (!this.initialized) return;
+
+    // compute the delta between the currently display and new frame:
+    const lineDiff = frameDiff(this.colors, colors);
+    console.log(lineDiff.length);
+    if (lineDiff.length > 6) {
+      this.setKeys(colors);
+      return;
+    }
+
+    // console.time('rgbkbdwritediff');
+
+    await this.startCommand();
+
+    const count = lineDiff.length;
+    for (let i = 0; i < count; i += 1) {
+      const diff = lineDiff[i];
+      // console.log(diff);
+      // this.buffer[0] = 0x04;
+      this.buffer[GMMK_COMMAND_OFFSET] = GMMK_CMD_KEYCOLORS;
+      // this.buffer[GMMK_KEYCOLORS_COUNT_OFFSET] = ((count - i) * 3 > GMMK_KEYCOLORS_DATA_SIZE)
+      //   ? GMMK_KEYCOLORS_DATA_SIZE : (count - i) * 3;
+      // console.log(`${bytesRemaining} bytes still left to send`)
+
+      const bytesToBeSent = Math.min(GMMK_KEYCOLORS_DATA_SIZE, diff.length * 3);
+      this.buffer[GMMK_KEYCOLORS_COUNT_OFFSET] = bytesToBeSent;
+
+      // note that the offset actually get's bigger than 255
+      // so this is actually needed.
+      const offset = diff.offset * 3;
+      this.buffer[GMMK_KEYCOLORS_START_OFFSET] = offset & 0xff;
+      this.buffer[GMMK_KEYCOLORS_START_OFFSET + 1] = (offset >> 8);
+
+      // console.log(`Bytes to be sent: ${bytesToBeSent}`);
+
+      for (let j = 0; j < diff.length; j += 1) {
+        this.buffer[GMMK_KEYCOLORS_DATA_OFFSET + (j * 3)] = colors[diff.offset + j].r;
+        this.buffer[GMMK_KEYCOLORS_DATA_OFFSET + ((j * 3) + 1)] = colors[diff.offset + j].g;
+        this.buffer[GMMK_KEYCOLORS_DATA_OFFSET + ((j * 3) + 2)] = colors[diff.offset + j].b;
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await this.write(this.buffer);
+
+      // Update local framebuffer as well
+      for (let is = 0; is < diff.length; is += 1) {
+        this.colors[diff.offset + is] = colors[diff.offset + is];
+      }
+    }
+    await this.endCommand();
+    // console.timeEnd('rgbkbdwritediff');
   }
 
   // // private
@@ -212,14 +332,14 @@ export class GMMKInterface {
   // uses the variant from GMMK util, for now.
 
   async startCommand(): Promise<void> {
-    // this.resetBuffer();
+    this.resetBuffer();
     this.buffer[GMMK_COMMAND_OFFSET] = GMMK_CMD_START;
     await this.write(this.buffer);
   }
 
   // // uses the variant from GMMK util, for now.
   async endCommand(): Promise<void> {
-    // this.resetBuffer();
+    this.resetBuffer();
     this.buffer[GMMK_COMMAND_OFFSET] = GMMK_CMD_END;
     await this.write(this.buffer);
   }
@@ -229,7 +349,7 @@ export class GMMKInterface {
 
     // console.log('____')
     // console.log('Before Checksum')
-    // console.log(buffer)
+    // console.log(buffer);
     buffer[0] = 0x04;
     const sum = buffer.slice(GMMK_COMMAND_OFFSET).reduce((acc, e) => acc + e) & 0xffff;
     buffer[GMMK_SUM_OFFSET] = sum & 0xff;
@@ -238,6 +358,7 @@ export class GMMKInterface {
     // console.log(buffer)
     // console.log('____')
     await this.selectedDevice.sendReport(0x04, buffer.slice(1));
+    // this.resetBuffer();
   }
 }
 
